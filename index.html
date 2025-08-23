@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Transcript (EN + VI) - Google Drive</title>
+<style>
+    body { font-family: Arial, sans-serif; }
+    #player { margin-bottom: 15px; }
+    #transcript { max-width: 800px; margin: 0 auto; }
+    .line { padding: 8px; border-bottom: 1px solid #ccc; cursor: pointer; position: relative; }
+    .line:hover { background-color: #eef; }
+    .user { font-weight: bold; }
+    .machine { color: gray; margin-left: 10px; }
+    .line[contenteditable="true"] { background-color: #ffffcc; outline: 1px dashed #999; }
+    .highlight { background-color: #d1ecf1 !important; }
+    .record-btn {
+      position: absolute; right: 10px; top: 8px;
+      background: #2196f3; color: white; border: none;
+      padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
+    }
+    .result { margin-top: 5px; font-size: 13px; }
+    #toolbar {
+      display: none; position: absolute; background: #fff;
+      border: 1px solid #ccc; padding: 5px; z-index: 1000;
+    }
+</style>
+</head>
+<body>
+<div style="margin: 20px auto; max-width: 800px;">
+<label>🔗 Google Drive File ID: 
+  <input id="videoIdInput" style="width: 300px;" type="text" 
+         value="18oMI0n4P3D48bpKb9dT0WbUpTYYLafyq"/>
+</label><br/><br/>
+<label>📝 English Transcript: <textarea id="scriptEN" rows="6" style="width: 100%;"></textarea></label><br/><br/>
+<label>🇻🇳 Vietnamese Transcript: <textarea id="scriptVI" rows="6" style="width: 100%;"></textarea></label><br/><br/>
+<br/>
+<button id="loadBtn">▶️ Load Video + Transcript</button><br/>
+<button onclick="saveScripts()">💾 Save Script</button>
+<br/><br/>
+<label>📂 Load Saved Script (.json): 
+  <input type="file" id="loadFileInput" accept=".json" onchange="loadScriptFile(event)">
+</label>
+</div>
+
+<!-- HTML5 Video Player -->
+<video id="player" width="640" height="360" controls>
+  <source id="videoSource" src="" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+<h3>Transcript (EN + VI)</h3>
+<div id="toolbar">
+  <button onclick="execCmd('bold')"><b>B</b></button>
+  <button onclick="execCmd('italic')"><i>I</i></button>
+  <button onclick="execCmd('underline')"><u>U</u></button>
+  <input onchange="execCmd('foreColor', this.value)" type="color"/>
+</div>
+<div id="transcript"></div>
+
+<button id="togglePause" style="
+  position: fixed; bottom: 20px; right: 20px;
+  z-index: 999; padding: 10px 15px;
+  background-color: #f44336; color: white;
+  border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">
+Pause</button>
+
+<script>
+let player = document.getElementById('player');
+let transcriptData = [];
+let userScrolling = false;
+let scrollTimeout = null;
+
+// Toggle Play/Pause
+document.getElementById('togglePause').onclick = function () {
+  if (player.paused) { player.play(); this.textContent = 'Pause'; }
+  else { player.pause(); this.textContent = 'Play'; }
+};
+
+// Highlight theo thời gian
+player.addEventListener('timeupdate', trackCurrentLine);
+function trackCurrentLine() {
+  const currentTime = player.currentTime;
+  let currentId = null;
+  for (let i = 0; i < transcriptData.length; i++) {
+    const line = transcriptData[i];
+    if (currentTime >= line.time &&
+        (i === transcriptData.length - 1 || currentTime < transcriptData[i+1].time)) {
+      currentId = line.id;
+      break;
+    }
+  }
+  document.querySelectorAll('.line').forEach(el => el.classList.remove('highlight'));
+  if (currentId && currentId.startsWith('en_')) {
+    const activeEl = document.getElementById(currentId);
+    if (activeEl) {
+      activeEl.classList.add('highlight');
+      if (!userScrolling) activeEl.scrollIntoView({behavior:'smooth',block:'center'});
+    }
+  }
+}
+
+// Parse transcript text
+function parseTranscript(raw) {
+  const lines = raw.trim().split('\n');
+  const parsed = [];
+  let currentTime = null, currentText = [];
+  for (const line of lines) {
+    const match = line.match(/^(\d+):(\d{2})$/);
+    if (match) {
+      if (currentTime !== null && currentText.length)
+        parsed.push({ time: currentTime, text: currentText.join('<br>') });
+      currentTime = parseInt(match[1]) * 60 + parseInt(match[2]);
+      currentText = [];
+    } else {
+      currentText.push(line.trim());
+    }
+  }
+  if (currentTime !== null && currentText.length)
+    parsed.push({ time: currentTime, text: currentText.join('<br>') });
+  return parsed;
+}
+
+// Tạo card cho mỗi dòng transcript
+function createLineCard(id, time, fallbackText, className) {
+  const div = document.createElement('div');
+  div.className = `line ${className}`;
+  div.dataset.time = time;
+  div.id = id;
+  div.innerHTML = fallbackText;
+  div.onclick = () => { player.currentTime = time; player.play(); };
+  return div;
+}
+
+// Load video và transcript
+function loadVideoAndTranscript() {
+  const fileId = document.getElementById('videoIdInput').value.trim();
+  const rawEN = document.getElementById('scriptEN').value.trim();
+  const rawVI = document.getElementById('scriptVI').value.trim();
+
+  const src = `https://drive.google.com/uc?export=download&id=${fileId}`;
+  document.getElementById('videoSource').src = src;
+  player.load();
+
+  const en = parseTranscript(rawEN);
+  const vi = parseTranscript(rawVI);
+  const transcript = document.getElementById('transcript');
+  transcript.innerHTML = '';
+  transcriptData = [];
+
+  for (let i = 0; i < Math.max(en.length, vi.length); i++) {
+    if (en[i]) {
+      const text = `[${Math.floor(en[i].time/60)}:${(en[i].time%60).toString().padStart(2,'0')}] ${en[i].text}`;
+      const div = createLineCard('en_'+i, en[i].time, text, 'user');
+      transcript.appendChild(div);
+      transcriptData.push({ id: 'en_'+i, time: en[i].time });
+    }
+    if (vi[i]) {
+      const text = `[VI] ${vi[i].text}`;
+      const div = createLineCard('vi_'+i, vi[i].time, text, 'machine');
+      transcript.appendChild(div);
+    }
+  }
+}
+
+// Gắn nút load
+document.getElementById('loadBtn').addEventListener('click', loadVideoAndTranscript);
+
+// User scroll
+document.getElementById('transcript').addEventListener('wheel', () => {
+  userScrolling = true;
+  clearTimeout(scrollTimeout);
+  scrollTimeout = setTimeout(() => userScrolling = false, 9000);
+});
+
+// Double click để edit
+document.addEventListener('dblclick', e => {
+  if (e.target.classList.contains('line')) {
+    e.target.contentEditable = true; e.target.focus();
+  }
+});
+
+// Toolbar formatting
+document.addEventListener('mouseup', e => {
+  const sel = window.getSelection();
+  if (sel.toString().length > 0) {
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    const toolbar = document.getElementById('toolbar');
+    toolbar.style.top = `${window.scrollY + rect.top - 40}px`; 
+    toolbar.style.left = `${window.scrollX + rect.left}px`; 
+    toolbar.style.display = 'block';
+  } else {
+    document.getElementById('toolbar').style.display = 'none';
+  }
+});
+function execCmd(cmd, value = null) {
+  document.execCommand(cmd, false, value);
+}
+
+// Save scripts JSON
+function saveScripts() {
+  const fileId = document.getElementById('videoIdInput').value.trim();
+  const lines = document.querySelectorAll('.line');
+  const enChunks = [], viChunks = [];
+  for (const line of lines) {
+    const time = parseInt(line.dataset.time || '0');
+    const minutes = Math.floor(time / 60);
+    const seconds = (time % 60).toString().padStart(2,'0');
+    let content = line.innerHTML.replace(/<[^>]+>/g,'').trim();
+    let block;
+    if (line.classList.contains('user')) {
+      block = `${minutes}:${seconds}\n${content.replace(/^\[\d+:\d{2}\]\s*/, '')}`;
+      enChunks.push(block);
+    } else if (line.classList.contains('machine')) {
+      block = `${minutes}:${seconds}\n${content.replace(/^\[VI\]\s*/, '')}`;
+      viChunks.push(block);
+    }
+  }
+  const blob = new Blob([JSON.stringify({
+    fileId, enText: enChunks.join('\n\n'), viText: viChunks.join('\n\n')
+  }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `transcript_${fileId||'video'}.json`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Load scripts JSON
+function loadScriptFile(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      document.getElementById('videoIdInput').value = data.fileId || '';
+      document.getElementById('scriptEN').value = data.enText || '';
+      document.getElementById('scriptVI').value = data.viText || '';
+    } catch (err) { alert('Invalid JSON file.'); }
+  };
+  reader.readAsText(file);
+}
+</script>
+</body>
+</html>
