@@ -1,243 +1,726 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi" class="light">
 <head>
-<meta charset="utf-8"/>
-<title>Transcript (EN + VI) - Google Drive</title>
-<style>
-    body { font-family: Arial, sans-serif; }
-    #player { margin-bottom: 15px; }
-    #transcript { max-width: 800px; margin: 0 auto; }
-    .line { padding: 8px; border-bottom: 1px solid #ccc; cursor: pointer; position: relative; }
-    .line:hover { background-color: #eef; }
-    .user { font-weight: bold; }
-    .machine { color: gray; margin-left: 10px; }
-    .line[contenteditable="true"] { background-color: #ffffcc; outline: 1px dashed #999; }
-    .highlight { background-color: #d1ecf1 !important; }
-    .record-btn {
-      position: absolute; right: 10px; top: 8px;
-      background: #2196f3; color: white; border: none;
-      padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
-    }
-    .result { margin-top: 5px; font-size: 13px; }
-    #toolbar {
-      display: none; position: absolute; background: #fff;
-      border: 1px solid #ccc; padding: 5px; z-index: 1000;
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Mục Tiêu & Kỷ Luật</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        danger: '#ef4444',
+                        success: '#10b981',
+                        warning: '#f59e0b'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar & Animations */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        
+        .task-card { transition: all 0.2s ease-in-out; }
+        .task-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        
+        /* Modal transition */
+        .modal-enter { opacity: 0; transform: scale(0.95); }
+        .modal-enter-active { opacity: 1; transform: scale(1); transition: all 0.2s ease-out; }
+        .modal-exit { opacity: 1; transform: scale(1); }
+        .modal-exit-active { opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in; }
+    </style>
 </head>
-<body>
-<div style="margin: 20px auto; max-width: 800px;">
-<label>🔗 Google Drive File ID: 
-  <input id="videoIdInput" style="width: 300px;" type="text" 
-         value="18oMI0n4P3D48bpKb9dT0WbUpTYYLafyq"/>
-</label><br/><br/>
-<label>📝 English Transcript: <textarea id="scriptEN" rows="6" style="width: 100%;"></textarea></label><br/><br/>
-<label>🇻🇳 Vietnamese Transcript: <textarea id="scriptVI" rows="6" style="width: 100%;"></textarea></label><br/><br/>
-<br/>
-<button id="loadBtn">▶️ Load Video + Transcript</button><br/>
-<button onclick="saveScripts()">💾 Save Script</button>
-<br/><br/>
-<label>📂 Load Saved Script (.json): 
-  <input type="file" id="loadFileInput" accept=".json" onchange="loadScriptFile(event)">
-</label>
-</div>
+<body class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-200 font-sans min-h-screen transition-colors duration-300">
 
-<!-- HTML5 Video Player -->
-<video id="player" width="640" height="360" controls>
-  <source id="videoSource" src="" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+    <header class="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-10 transition-colors duration-300">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <h1 class="text-xl md:text-2xl font-bold text-primary flex items-center gap-2">
+                <i class="fas fa-bullseye"></i> GoalTracker Pro
+            </h1>
+            <div class="flex items-center gap-3 md:gap-4">
+                <button onclick="exportData()" class="p-2 text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary transition" title="Tải dữ liệu xuống">
+                    <i class="fas fa-download"></i>
+                </button>
+                <label class="p-2 text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary cursor-pointer transition" title="Nhập dữ liệu">
+                    <i class="fas fa-upload"></i>
+                    <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(event)">
+                </label>
+                <button onclick="toggleDarkMode()" class="p-2 text-gray-500 hover:text-warning dark:text-gray-400 dark:hover:text-warning transition text-lg" title="Chuyển chế độ giao diện">
+                    <i id="themeIcon" class="fas fa-moon"></i>
+                </button>
+            </div>
+        </div>
+    </header>
 
-<h3>Transcript (EN + VI)</h3>
-<div id="toolbar">
-  <button onclick="execCmd('bold')"><b>B</b></button>
-  <button onclick="execCmd('italic')"><i>I</i></button>
-  <button onclick="execCmd('underline')"><u>U</u></button>
-  <input onchange="execCmd('foreColor', this.value)" type="color"/>
-</div>
-<div id="transcript"></div>
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
+        
+        <aside class="lg:col-span-1 space-y-6">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors duration-300">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold border-b-2 border-primary pb-1">Mục Tiêu</h2>
+                    <button onclick="openGoalModal()" class="text-sm bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-full w-8 h-8 flex items-center justify-center transition">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <ul id="goalsList" class="space-y-2">
+                    </ul>
+            </div>
 
-<button id="togglePause" style="
-  position: fixed; bottom: 20px; right: 20px;
-  z-index: 999; padding: 10px 15px;
-  background-color: #f44336; color: white;
-  border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">
-Pause</button>
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors duration-300">
+                <h2 class="text-lg font-semibold border-b-2 border-success pb-1 mb-4">Thống Kê</h2>
+                <div id="statsContainer" class="space-y-4">
+                    </div>
+            </div>
+        </aside>
 
-<script>
-let player = document.getElementById('player');
-let transcriptData = [];
-let userScrolling = false;
-let scrollTimeout = null;
+        <section class="lg:col-span-3 space-y-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 transition-colors duration-300">
+                <div>
+                    <h2 id="currentGoalTitle" class="text-xl font-bold">Tất cả công việc</h2>
+                    <p id="currentGoalProgress" class="text-sm text-gray-500 dark:text-gray-400 mt-1"></p>
+                </div>
+                <button onclick="openTaskModal()" class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg shadow transition flex items-center gap-2 w-full sm:w-auto justify-center">
+                    <i class="fas fa-plus"></i> Thêm Công Việc
+                </button>
+            </div>
 
-// Toggle Play/Pause
-document.getElementById('togglePause').onclick = function () {
-  if (player.paused) { player.play(); this.textContent = 'Pause'; }
-  else { player.pause(); this.textContent = 'Play'; }
-};
+            <div id="tasksList" class="space-y-4">
+                </div>
+        </section>
 
-// Highlight theo thời gian
-player.addEventListener('timeupdate', trackCurrentLine);
-function trackCurrentLine() {
-  const currentTime = player.currentTime;
-  let currentId = null;
-  for (let i = 0; i < transcriptData.length; i++) {
-    const line = transcriptData[i];
-    if (currentTime >= line.time &&
-        (i === transcriptData.length - 1 || currentTime < transcriptData[i+1].time)) {
-      currentId = line.id;
-      break;
-    }
-  }
-  document.querySelectorAll('.line').forEach(el => el.classList.remove('highlight'));
-  if (currentId && currentId.startsWith('en_')) {
-    const activeEl = document.getElementById(currentId);
-    if (activeEl) {
-      activeEl.classList.add('highlight');
-      if (!userScrolling) activeEl.scrollIntoView({behavior:'smooth',block:'center'});
-    }
-  }
-}
+    </main>
 
-// Parse transcript text
-function parseTranscript(raw) {
-  const lines = raw.trim().split('\n');
-  const parsed = [];
-  let currentTime = null, currentText = [];
-  for (const line of lines) {
-    const match = line.match(/^(\d+):(\d{2})$/);
-    if (match) {
-      if (currentTime !== null && currentText.length)
-        parsed.push({ time: currentTime, text: currentText.join('<br>') });
-      currentTime = parseInt(match[1]) * 60 + parseInt(match[2]);
-      currentText = [];
-    } else {
-      currentText.push(line.trim());
-    }
-  }
-  if (currentTime !== null && currentText.length)
-    parsed.push({ time: currentTime, text: currentText.join('<br>') });
-  return parsed;
-}
+    <div id="goalModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-6 modal-enter">
+            <h3 id="goalModalTitle" class="text-xl font-bold mb-4">Thêm Mục Tiêu</h3>
+            <input type="hidden" id="goalId">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Tên mục tiêu <span class="text-danger">*</span></label>
+                    <input type="text" id="goalName" class="w-full border dark:border-gray-600 dark:bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Ví dụ: Học Tiếng Anh">
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button onclick="closeModal('goalModal')" class="px-4 py-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition">Hủy</button>
+                    <button onclick="saveGoal()" class="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg shadow transition">Lưu</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-// Tạo card cho mỗi dòng transcript
-function createLineCard(id, time, fallbackText, className) {
-  const div = document.createElement('div');
-  div.className = `line ${className}`;
-  div.dataset.time = time;
-  div.id = id;
-  div.innerHTML = fallbackText;
-  div.onclick = () => { player.currentTime = time; player.play(); };
-  return div;
-}
+    <div id="taskModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4 overflow-y-auto">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg p-6 my-8 modal-enter">
+            <h3 id="taskModalTitle" class="text-xl font-bold mb-4">Thêm Công Việc</h3>
+            <input type="hidden" id="taskId">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Thuộc Mục Tiêu <span class="text-danger">*</span></label>
+                    <select id="taskGoalId" class="w-full border dark:border-gray-600 dark:bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Tên công việc <span class="text-danger">*</span></label>
+                    <input type="text" id="taskName" class="w-full border dark:border-gray-600 dark:bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Ví dụ: Luyện nghe 30 phút">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Bắt đầu <span class="text-danger">*</span></label>
+                        <input type="datetime-local" id="taskStart" class="w-full border dark:border-gray-600 dark:bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Kết thúc <span class="text-danger">*</span></label>
+                        <input type="datetime-local" id="taskEnd" class="w-full border dark:border-gray-600 dark:bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Mức độ ưu tiên</label>
+                        <select id="taskPriority" class="w-full border dark:border-gray-600 dark:bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                            <option value="low">Thấp</option>
+                            <option value="medium" selected>Trung bình</option>
+                            <option value="high">Cao</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-danger font-bold">Hình phạt (Penalty)</label>
+                        <input type="text" id="taskPenalty" class="w-full border dark:border-gray-600 dark:bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-danger" placeholder="Vd: Chạy 5km / Không cafe">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Ghi chú</label>
+                    <textarea id="taskNotes" rows="2" class="w-full border dark:border-gray-600 dark:bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button onclick="closeModal('taskModal')" class="px-4 py-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition">Hủy</button>
+                    <button onclick="saveTask()" class="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg shadow transition">Lưu Công Việc</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-// Load video và transcript
-function loadVideoAndTranscript() {
-  const fileId = document.getElementById('videoIdInput').value.trim();
-  const rawEN = document.getElementById('scriptEN').value.trim();
-  const rawVI = document.getElementById('scriptVI').value.trim();
+    <div id="notificationToast" class="fixed bottom-4 right-4 bg-white dark:bg-gray-800 border-l-4 border-primary shadow-2xl p-4 rounded-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 max-w-sm w-full flex gap-3">
+        <div class="text-primary text-2xl"><i class="fas fa-bell ring-animation"></i></div>
+        <div class="flex-1">
+            <h4 class="font-bold text-lg" id="toastTitle">Đến giờ!</h4>
+            <p class="text-sm text-gray-600 dark:text-gray-300" id="toastDesc"></p>
+        </div>
+        <button onclick="hideToast()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+    </div>
 
-  const src = `https://drive.google.com/uc?export=download&id=${fileId}`;
-  document.getElementById('videoSource').src = src;
-  player.load();
+    <script>
+        // --- 1. QUẢN LÝ TRẠNG THÁI (STATE) ---
+        let state = {
+            goals: [],
+            tasks: [],
+            settings: { darkMode: false },
+            activeGoalId: 'all' // 'all' hoặc goalId
+        };
 
-  const en = parseTranscript(rawEN);
-  const vi = parseTranscript(rawVI);
-  const transcript = document.getElementById('transcript');
-  transcript.innerHTML = '';
-  transcriptData = [];
+        // --- 2. HỆ THỐNG LƯU TRỮ (LOCAL STORAGE) ---
+        const STORAGE_KEY = 'GoalTrackerData';
 
-  for (let i = 0; i < Math.max(en.length, vi.length); i++) {
-    if (en[i]) {
-      const text = `[${Math.floor(en[i].time/60)}:${(en[i].time%60).toString().padStart(2,'0')}] ${en[i].text}`;
-      const div = createLineCard('en_'+i, en[i].time, text, 'user');
-      transcript.appendChild(div);
-      transcriptData.push({ id: 'en_'+i, time: en[i].time });
-    }
-    if (vi[i]) {
-      const text = `[VI] ${vi[i].text}`;
-      const div = createLineCard('vi_'+i, vi[i].time, text, 'machine');
-      transcript.appendChild(div);
-    }
-  }
-}
+        function loadData() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            if (data) {
+                try {
+                    const parsed = JSON.parse(data);
+                    state.goals = parsed.goals || [];
+                    state.tasks = parsed.tasks || [];
+                    state.settings = parsed.settings || { darkMode: false };
+                } catch (e) {
+                    console.error("Lỗi đọc dữ liệu:", e);
+                }
+            }
+            applyTheme();
+            requestNotificationPermission();
+        }
 
-// Gắn nút load
-document.getElementById('loadBtn').addEventListener('click', loadVideoAndTranscript);
+        function saveData() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            renderApp();
+        }
 
-// User scroll
-document.getElementById('transcript').addEventListener('wheel', () => {
-  userScrolling = true;
-  clearTimeout(scrollTimeout);
-  scrollTimeout = setTimeout(() => userScrolling = false, 9000);
-});
+        // Xuất / Nhập File
+        function exportData() {
+            const dataStr = JSON.stringify(state, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `GoalTracker_Backup_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
 
-// Double click để edit
-document.addEventListener('dblclick', e => {
-  if (e.target.classList.contains('line')) {
-    e.target.contentEditable = true; e.target.focus();
-  }
-});
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if(imported.goals && imported.tasks) {
+                        state = imported;
+                        saveData();
+                        alert("Nhập dữ liệu thành công!");
+                    } else {
+                        alert("File không đúng định dạng!");
+                    }
+                } catch (err) {
+                    alert("Lỗi đọc file!");
+                }
+            };
+            reader.readAsText(file);
+        }
 
-// Toolbar formatting
-document.addEventListener('mouseup', e => {
-  const sel = window.getSelection();
-  if (sel.toString().length > 0) {
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
-    const toolbar = document.getElementById('toolbar');
-    toolbar.style.top = `${window.scrollY + rect.top - 40}px`; 
-    toolbar.style.left = `${window.scrollX + rect.left}px`; 
-    toolbar.style.display = 'block';
-  } else {
-    document.getElementById('toolbar').style.display = 'none';
-  }
-});
-function execCmd(cmd, value = null) {
-  document.execCommand(cmd, false, value);
-}
+        // --- 3. TIỆN ÍCH (UTILITIES) ---
+        const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
+        
+        function toggleDarkMode() {
+            state.settings.darkMode = !state.settings.darkMode;
+            applyTheme();
+            saveData();
+        }
 
-// Save scripts JSON
-function saveScripts() {
-  const fileId = document.getElementById('videoIdInput').value.trim();
-  const lines = document.querySelectorAll('.line');
-  const enChunks = [], viChunks = [];
-  for (const line of lines) {
-    const time = parseInt(line.dataset.time || '0');
-    const minutes = Math.floor(time / 60);
-    const seconds = (time % 60).toString().padStart(2,'0');
-    let content = line.innerHTML.replace(/<[^>]+>/g,'').trim();
-    let block;
-    if (line.classList.contains('user')) {
-      block = `${minutes}:${seconds}\n${content.replace(/^\[\d+:\d{2}\]\s*/, '')}`;
-      enChunks.push(block);
-    } else if (line.classList.contains('machine')) {
-      block = `${minutes}:${seconds}\n${content.replace(/^\[VI\]\s*/, '')}`;
-      viChunks.push(block);
-    }
-  }
-  const blob = new Blob([JSON.stringify({
-    fileId, enText: enChunks.join('\n\n'), viText: viChunks.join('\n\n')
-  }, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `transcript_${fileId||'video'}.json`; a.click();
-  URL.revokeObjectURL(url);
-}
+        function applyTheme() {
+            const html = document.documentElement;
+            const icon = document.getElementById('themeIcon');
+            if (state.settings.darkMode) {
+                html.classList.add('dark');
+                icon.className = 'fas fa-sun';
+            } else {
+                html.classList.remove('dark');
+                icon.className = 'fas fa-moon';
+            }
+        }
 
-// Load scripts JSON
-function loadScriptFile(event) {
-  const file = event.target.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const data = JSON.parse(e.target.result);
-      document.getElementById('videoIdInput').value = data.fileId || '';
-      document.getElementById('scriptEN').value = data.enText || '';
-      document.getElementById('scriptVI').value = data.viText || '';
-    } catch (err) { alert('Invalid JSON file.'); }
-  };
-  reader.readAsText(file);
-}
-</script>
+        function formatDate(dateString) {
+            const options = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' };
+            return new Date(dateString).toLocaleDateString('vi-VN', options);
+        }
+
+        function calculateTimeLeft(targetDate) {
+            const diff = new Date(targetDate) - new Date();
+            if (diff <= 0) return null;
+            const h = Math.floor(diff / (1000 * 60 * 60));
+            const m = Math.floor((diff / 1000 / 60) % 60);
+            const s = Math.floor((diff / 1000) % 60);
+            return `${h}h ${m}m ${s}s`;
+        }
+
+        // --- 4. RENDER GIAO DIỆN ---
+        function renderApp() {
+            renderGoalsList();
+            renderTasksList();
+            renderStats();
+            updateGoalSelectInModal();
+        }
+
+        function renderGoalsList() {
+            const list = document.getElementById('goalsList');
+            let html = `
+                <li class="cursor-pointer p-2 rounded-lg transition ${state.activeGoalId === 'all' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}" 
+                    onclick="setActiveGoal('all')">
+                    <i class="fas fa-list-ul w-5"></i> Tất cả
+                </li>
+            `;
+            
+            state.goals.forEach(goal => {
+                const isActive = state.activeGoalId === goal.id;
+                html += `
+                    <li class="group flex justify-between items-center p-2 rounded-lg transition ${isActive ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}">
+                        <div class="cursor-pointer flex-1 truncate" onclick="setActiveGoal('${goal.id}')">
+                            <i class="fas fa-folder w-5 text-gray-400 ${isActive ? 'text-primary' : ''}"></i> ${goal.name}
+                        </div>
+                        <div class="opacity-0 group-hover:opacity-100 transition flex gap-2">
+                            <button onclick="editGoal('${goal.id}')" class="text-blue-500 hover:text-blue-700"><i class="fas fa-edit"></i></button>
+                            <button onclick="deleteGoal('${goal.id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </li>
+                `;
+            });
+            list.innerHTML = html;
+        }
+
+        function renderStats() {
+            const container = document.getElementById('statsContainer');
+            const total = state.tasks.length;
+            const completed = state.tasks.filter(t => t.completed).length;
+            const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+            container.innerHTML = `
+                <div class="flex justify-between text-sm mb-1">
+                    <span>Tiến độ tổng:</span>
+                    <span class="font-bold">${percent}%</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-4">
+                    <div class="bg-success h-2.5 rounded-full transition-all duration-500" style="width: ${percent}%"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 text-center">
+                    <div class="bg-gray-50 dark:bg-gray-700 p-2 rounded-lg">
+                        <div class="text-2xl font-bold text-success">${completed}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Đã xong</div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-700 p-2 rounded-lg">
+                        <div class="text-2xl font-bold text-warning">${total - completed}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Đang chờ</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderTasksList() {
+            const list = document.getElementById('tasksList');
+            const title = document.getElementById('currentGoalTitle');
+            const progress = document.getElementById('currentGoalProgress');
+
+            let filteredTasks = state.tasks;
+            if (state.activeGoalId !== 'all') {
+                filteredTasks = state.tasks.filter(t => t.goalId === state.activeGoalId);
+                const goal = state.goals.find(g => g.id === state.activeGoalId);
+                title.textContent = goal ? goal.name : "Mục tiêu không tồn tại";
+            } else {
+                title.textContent = "Tất cả công việc";
+            }
+
+            // Sắp xếp task theo thời gian bắt đầu
+            filteredTasks.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
+            // Cập nhật text phụ
+            const comp = filteredTasks.filter(t => t.completed).length;
+            progress.textContent = `${comp}/${filteredTasks.length} công việc hoàn thành`;
+
+            if (filteredTasks.length === 0) {
+                list.innerHTML = `<div class="text-center py-10 text-gray-500"><i class="fas fa-clipboard-list text-4xl mb-3 opacity-50"></i><p>Chưa có công việc nào.</p></div>`;
+                return;
+            }
+
+            let html = '';
+            const now = new Date();
+
+            filteredTasks.forEach(task => {
+                const start = new Date(task.startTime);
+                const end = new Date(task.endTime);
+                
+                // Trạng thái
+                let statusClass = 'border-l-4 border-gray-300 dark:border-gray-600';
+                let statusIcon = '<i class="far fa-circle text-gray-400 hover:text-success transition text-xl"></i>';
+                let overdueWarning = '';
+                let timerHtml = '';
+
+                if (task.completed) {
+                    statusClass = 'border-l-4 border-success opacity-75';
+                    statusIcon = '<i class="fas fa-check-circle text-success text-xl"></i>';
+                } else if (now > end) {
+                    // Quá hạn
+                    statusClass = 'border-l-4 border-danger bg-red-50 dark:bg-red-900/20';
+                    overdueWarning = `
+                        <div class="mt-3 p-2 bg-red-100 dark:bg-red-900/50 text-danger rounded-md text-sm flex items-start gap-2 border border-red-200 dark:border-red-800">
+                            <i class="fas fa-exclamation-triangle mt-1"></i>
+                            <div>
+                                <strong>Quá hạn! Hình phạt:</strong><br>
+                                ${task.penalty || 'Không có hình phạt. Nhưng hãy tự giác nhé!'}
+                            </div>
+                        </div>
+                    `;
+                } else if (now < start) {
+                    // Chưa bắt đầu - Hiện countdown
+                    timerHtml = `<span class="countdown text-xs font-mono bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded" data-start="${task.startTime}">Đang tính...</span>`;
+                } else {
+                    // Đang diễn ra
+                    statusClass = 'border-l-4 border-warning';
+                    timerHtml = `<span class="text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-1 rounded"><i class="fas fa-spinner fa-spin mr-1"></i>Đang diễn ra</span>`;
+                }
+
+                // Priority Badge
+                const prioColors = {
+                    high: 'text-red-600 bg-red-100 dark:bg-red-900/50 dark:text-red-400',
+                    medium: 'text-blue-600 bg-blue-100 dark:bg-blue-900/50 dark:text-blue-400',
+                    low: 'text-gray-600 bg-gray-100 dark:bg-gray-700 dark:text-gray-400'
+                };
+                const prioLabels = { high: 'Cao', medium: 'Vừa', low: 'Thấp' };
+
+                const goalName = state.goals.find(g => g.id === task.goalId)?.name || 'Không rõ';
+
+                html += `
+                    <div class="task-card bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm ${statusClass}">
+                        <div class="flex items-start gap-3">
+                            <button onclick="toggleTaskStatus('${task.id}')" class="mt-1 focus:outline-none" title="Đánh dấu hoàn thành">
+                                ${statusIcon}
+                            </button>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                                    <h3 class="font-bold text-lg ${task.completed ? 'line-through text-gray-500' : ''}">${task.name}</h3>
+                                    <div class="flex items-center gap-2">
+                                        ${timerHtml}
+                                        <span class="text-xs px-2 py-1 rounded-full ${prioColors[task.priority]}">${prioLabels[task.priority]}</span>
+                                        <div class="flex gap-2 ml-2">
+                                            <button onclick="editTask('${task.id}')" class="text-gray-400 hover:text-blue-500"><i class="fas fa-edit"></i></button>
+                                            <button onclick="deleteTask('${task.id}')" class="text-gray-400 hover:text-red-500"><i class="fas fa-trash"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-sm text-gray-600 dark:text-gray-400 flex flex-wrap gap-x-4 gap-y-1 mb-2">
+                                    <span title="Mục tiêu"><i class="fas fa-folder-open w-4"></i> ${goalName}</span>
+                                    <span><i class="far fa-clock w-4"></i> ${formatDate(task.startTime)} - ${formatDate(task.endTime)}</span>
+                                </div>
+                                
+                                ${task.notes ? `<p class="text-sm text-gray-500 italic mt-2 border-l-2 border-gray-200 dark:border-gray-600 pl-2">${task.notes}</p>` : ''}
+                                ${overdueWarning}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            list.innerHTML = html;
+        }
+
+        // --- 5. LOGIC QUẢN LÝ DỮ LIỆU ---
+        function setActiveGoal(id) {
+            state.activeGoalId = id;
+            renderTasksList();
+            renderGoalsList(); // Cập nhật style active
+        }
+
+        function toggleTaskStatus(id) {
+            const task = state.tasks.find(t => t.id === id);
+            if(task) {
+                task.completed = !task.completed;
+                saveData();
+            }
+        }
+
+        // LOGIC MỤC TIÊU
+        function openGoalModal() {
+            document.getElementById('goalId').value = '';
+            document.getElementById('goalName').value = '';
+            document.getElementById('goalModalTitle').innerText = 'Thêm Mục Tiêu';
+            document.getElementById('goalModal').classList.replace('hidden', 'flex');
+        }
+
+        function editGoal(id) {
+            const goal = state.goals.find(g => g.id === id);
+            if(goal) {
+                document.getElementById('goalId').value = goal.id;
+                document.getElementById('goalName').value = goal.name;
+                document.getElementById('goalModalTitle').innerText = 'Sửa Mục Tiêu';
+                document.getElementById('goalModal').classList.replace('hidden', 'flex');
+            }
+        }
+
+        function saveGoal() {
+            const id = document.getElementById('goalId').value;
+            const name = document.getElementById('goalName').value.trim();
+            if(!name) return alert("Vui lòng nhập tên mục tiêu!");
+
+            if(id) {
+                const goal = state.goals.find(g => g.id === id);
+                if(goal) goal.name = name;
+            } else {
+                state.goals.push({ id: generateId(), name });
+            }
+            closeModal('goalModal');
+            saveData();
+        }
+
+        function deleteGoal(id) {
+            if(confirm("Bạn có chắc muốn xóa mục tiêu này? Tất cả task bên trong sẽ bị xóa theo.")) {
+                state.goals = state.goals.filter(g => g.id !== id);
+                state.tasks = state.tasks.filter(t => t.goalId !== id);
+                if(state.activeGoalId === id) state.activeGoalId = 'all';
+                saveData();
+            }
+        }
+
+        // LOGIC CÔNG VIỆC
+        function updateGoalSelectInModal() {
+            const select = document.getElementById('taskGoalId');
+            select.innerHTML = state.goals.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+        }
+
+        function openTaskModal() {
+            if(state.goals.length === 0) return alert("Vui lòng tạo ít nhất 1 Mục tiêu trước!");
+            document.getElementById('taskId').value = '';
+            document.getElementById('taskFormResetHandler')(); // Helper clear form
+            
+            // Set default time (Now & +1 Hour)
+            const now = new Date();
+            const later = new Date(now.getTime() + 60*60*1000);
+            
+            const toLocalISO = (d) => new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+            
+            document.getElementById('taskStart').value = toLocalISO(now);
+            document.getElementById('taskEnd').value = toLocalISO(later);
+            
+            if(state.activeGoalId !== 'all') {
+                document.getElementById('taskGoalId').value = state.activeGoalId;
+            }
+
+            document.getElementById('taskModalTitle').innerText = 'Thêm Công Việc';
+            document.getElementById('taskModal').classList.replace('hidden', 'flex');
+        }
+
+        document.getElementById('taskFormResetHandler') = function() {
+            document.getElementById('taskName').value = '';
+            document.getElementById('taskPriority').value = 'medium';
+            document.getElementById('taskPenalty').value = '';
+            document.getElementById('taskNotes').value = '';
+        }
+
+        function editTask(id) {
+            const task = state.tasks.find(t => t.id === id);
+            if(task) {
+                document.getElementById('taskId').value = task.id;
+                document.getElementById('taskGoalId').value = task.goalId;
+                document.getElementById('taskName').value = task.name;
+                document.getElementById('taskStart').value = task.startTime;
+                document.getElementById('taskEnd').value = task.endTime;
+                document.getElementById('taskPriority').value = task.priority;
+                document.getElementById('taskPenalty').value = task.penalty || '';
+                document.getElementById('taskNotes').value = task.notes || '';
+                
+                document.getElementById('taskModalTitle').innerText = 'Sửa Công Việc';
+                document.getElementById('taskModal').classList.replace('hidden', 'flex');
+            }
+        }
+
+        function saveTask() {
+            const id = document.getElementById('taskId').value;
+            const taskData = {
+                goalId: document.getElementById('taskGoalId').value,
+                name: document.getElementById('taskName').value.trim(),
+                startTime: document.getElementById('taskStart').value,
+                endTime: document.getElementById('taskEnd').value,
+                priority: document.getElementById('taskPriority').value,
+                penalty: document.getElementById('taskPenalty').value.trim(),
+                notes: document.getElementById('taskNotes').value.trim()
+            };
+
+            if(!taskData.name || !taskData.startTime || !taskData.endTime) {
+                return alert("Vui lòng điền đủ tên và thời gian!");
+            }
+            if(new Date(taskData.startTime) >= new Date(taskData.endTime)) {
+                return alert("Thời gian kết thúc phải sau thời gian bắt đầu!");
+            }
+
+            if(id) {
+                const taskIndex = state.tasks.findIndex(t => t.id === id);
+                // Giữ lại trạng thái hoàn thành và thông báo khi sửa
+                taskData.completed = state.tasks[taskIndex].completed;
+                // Nếu đổi giờ bắt đầu về tương lai, reset notified
+                taskData.notified = new Date(taskData.startTime) > new Date() ? false : state.tasks[taskIndex].notified;
+                
+                state.tasks[taskIndex] = { id, ...taskData };
+            } else {
+                state.tasks.push({ 
+                    id: generateId(), 
+                    ...taskData, 
+                    completed: false,
+                    notified: false 
+                });
+            }
+            closeModal('taskModal');
+            saveData();
+        }
+
+        function deleteTask(id) {
+            if(confirm("Xóa công việc này?")) {
+                state.tasks = state.tasks.filter(t => t.id !== id);
+                saveData();
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.replace('flex', 'hidden');
+        }
+
+        // --- 6. HỆ THỐNG THÔNG BÁO VÀ THỜI GIAN THỰC (REAL-TIME ALARM & COUNTDOWN) ---
+        
+        // Cấp quyền Notification API
+        function requestNotificationPermission() {
+            if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+                Notification.requestPermission();
+            }
+        }
+
+        // Tạo âm thanh Bíp bằng Web Audio API (Không cần file mp3)
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+        function playAlarmSound() {
+            if (!audioCtx) audioCtx = new AudioContext();
+            
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.type = 'sine'; // Tiếng bíp mềm
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // Tần số (A5)
+            oscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5); // Giảm dần
+            
+            gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1); // Fade out
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 1);
+        }
+
+        function showToast(title, body) {
+            const toast = document.getElementById('notificationToast');
+            document.getElementById('toastTitle').innerText = title;
+            document.getElementById('toastDesc').innerText = body;
+            
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            
+            setTimeout(hideToast, 8000); // Tự ẩn sau 8s
+        }
+
+        function hideToast() {
+            const toast = document.getElementById('notificationToast');
+            toast.classList.add('translate-y-20', 'opacity-0');
+            toast.classList.remove('translate-y-0', 'opacity-100');
+        }
+
+        function triggerAlarm(task) {
+            // 1. Phát âm thanh
+            playAlarmSound();
+            
+            // 2. Hiển thị In-app Toast
+            showToast("Bắt đầu: " + task.name, "Đã đến giờ làm việc. Cố lên!");
+            
+            // 3. System Notification (Nếu có quyền)
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification("GoalTracker: Bắt đầu công việc!", {
+                    body: task.name,
+                    icon: "https://cdn-icons-png.flaticon.com/512/4333/4333609.png" // Icon placeholder
+                });
+            }
+        }
+
+        // Vòng lặp kiểm tra thời gian thực
+        function tickLoop() {
+            const now = new Date();
+            let needReRender = false;
+
+            // 1. Cập nhật Countdowns
+            const countdownElements = document.querySelectorAll('.countdown');
+            countdownElements.forEach(el => {
+                const target = el.getAttribute('data-start');
+                const timeLeft = calculateTimeLeft(target);
+                if (timeLeft) {
+                    el.innerText = `Còn ${timeLeft}`;
+                } else {
+                    // Chuyển trạng thái từ "Chưa bắt đầu" sang "Đang diễn ra" -> Cần render lại
+                    needReRender = true; 
+                }
+            });
+
+            // 2. Kiểm tra Alarms & Quá hạn
+            state.tasks.forEach(task => {
+                if (task.completed) return;
+
+                const start = new Date(task.startTime);
+                const end = new Date(task.endTime);
+
+                // Kích hoạt chuông khi VỪA ĐẾN GIỜ (trong khoảng 1 phút)
+                if (now >= start && !task.notified) {
+                    triggerAlarm(task);
+                    task.notified = true;
+                    saveData(); // Lưu trạng thái đã thông báo
+                    needReRender = false; // saveData đã gọi render
+                }
+                
+                // Cập nhật giao diện nếu đang xem mà task chuyển sang quá hạn
+                // (Chỉ re-render để hiện đỏ cảnh báo penalty)
+                // Hơi tốn hiệu năng re-render liên tục nên ta chỉ xét khi qua phút
+                if (now.getSeconds() === 0 && now > end) {
+                    needReRender = true;
+                }
+            });
+
+            if (needReRender) {
+                renderTasksList();
+            }
+        }
+
+        // --- 7. KHỞI CHẠY (INITIALIZATION) ---
+        window.onload = () => {
+            loadData();
+            // Cập nhật đồng hồ mỗi giây
+            setInterval(tickLoop, 1000);
+        };
+    </script>
 </body>
 </html>
