@@ -38,6 +38,18 @@
         .modal-enter-active { opacity: 1; transform: scale(1); transition: all 0.2s ease-out; }
         .modal-exit { opacity: 1; transform: scale(1); }
         .modal-exit-active { opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in; }
+        
+        /* Ring animation for bell */
+        @keyframes ring {
+            0% { transform: rotate(0); }
+            10% { transform: rotate(15deg); }
+            20% { transform: rotate(-10deg); }
+            30% { transform: rotate(5deg); }
+            40% { transform: rotate(-5deg); }
+            50% { transform: rotate(0); }
+            100% { transform: rotate(0); }
+        }
+        .ring-animation { animation: ring 2s infinite; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-200 font-sans min-h-screen transition-colors duration-300">
@@ -502,18 +514,26 @@
             }
         }
 
-        // LOGIC CÔNG VIỆC
+        // LOGIC CÔNG VIỆC (ĐÃ FIX LỖI)
         function updateGoalSelectInModal() {
             const select = document.getElementById('taskGoalId');
             select.innerHTML = state.goals.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
         }
 
+        // Khai báo function reset form chuẩn xác
+        function taskFormResetHandler() {
+            document.getElementById('taskName').value = '';
+            document.getElementById('taskPriority').value = 'medium';
+            document.getElementById('taskPenalty').value = '';
+            document.getElementById('taskNotes').value = '';
+        }
+
         function openTaskModal() {
             if(state.goals.length === 0) return alert("Vui lòng tạo ít nhất 1 Mục tiêu trước!");
             document.getElementById('taskId').value = '';
-            document.getElementById('taskFormResetHandler')(); // Helper clear form
+            taskFormResetHandler(); // Gọi hàm reset
             
-            // Set default time (Now & +1 Hour)
+            // Đặt thời gian mặc định (Hiện tại và +1 Tiếng sau)
             const now = new Date();
             const later = new Date(now.getTime() + 60*60*1000);
             
@@ -528,13 +548,6 @@
 
             document.getElementById('taskModalTitle').innerText = 'Thêm Công Việc';
             document.getElementById('taskModal').classList.replace('hidden', 'flex');
-        }
-
-        document.getElementById('taskFormResetHandler') = function() {
-            document.getElementById('taskName').value = '';
-            document.getElementById('taskPriority').value = 'medium';
-            document.getElementById('taskPenalty').value = '';
-            document.getElementById('taskNotes').value = '';
         }
 
         function editTask(id) {
@@ -577,7 +590,7 @@
                 const taskIndex = state.tasks.findIndex(t => t.id === id);
                 // Giữ lại trạng thái hoàn thành và thông báo khi sửa
                 taskData.completed = state.tasks[taskIndex].completed;
-                // Nếu đổi giờ bắt đầu về tương lai, reset notified
+                // Nếu đổi giờ bắt đầu về tương lai, reset trạng thái notified
                 taskData.notified = new Date(taskData.startTime) > new Date() ? false : state.tasks[taskIndex].notified;
                 
                 state.tasks[taskIndex] = { id, ...taskData };
@@ -594,7 +607,7 @@
         }
 
         function deleteTask(id) {
-            if(confirm("Xóa công việc này?")) {
+            if(confirm("Bạn có chắc muốn xóa công việc này?")) {
                 state.tasks = state.tasks.filter(t => t.id !== id);
                 saveData();
             }
@@ -606,18 +619,23 @@
 
         // --- 6. HỆ THỐNG THÔNG BÁO VÀ THỜI GIAN THỰC (REAL-TIME ALARM & COUNTDOWN) ---
         
-        // Cấp quyền Notification API
+        // Xin Cấp quyền Notification API
         function requestNotificationPermission() {
             if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
                 Notification.requestPermission();
             }
         }
 
-        // Tạo âm thanh Bíp bằng Web Audio API (Không cần file mp3)
+        // Tạo âm thanh Bíp bằng Web Audio API (Không cần tải file mp3 từ bên ngoài)
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         let audioCtx;
         function playAlarmSound() {
             if (!audioCtx) audioCtx = new AudioContext();
+            
+            // Resume context nếu bị trình duyệt suspend (đặc biệt trên iOS/Safari)
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
             
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
@@ -644,7 +662,7 @@
             toast.classList.remove('translate-y-20', 'opacity-0');
             toast.classList.add('translate-y-0', 'opacity-100');
             
-            setTimeout(hideToast, 8000); // Tự ẩn sau 8s
+            setTimeout(hideToast, 8000); // Tự ẩn popup sau 8s
         }
 
         function hideToast() {
@@ -660,7 +678,7 @@
             // 2. Hiển thị In-app Toast
             showToast("Bắt đầu: " + task.name, "Đã đến giờ làm việc. Cố lên!");
             
-            // 3. System Notification (Nếu có quyền)
+            // 3. System Notification (Nếu trình duyệt đã cấp quyền)
             if ("Notification" in window && Notification.permission === "granted") {
                 new Notification("GoalTracker: Bắt đầu công việc!", {
                     body: task.name,
@@ -669,12 +687,12 @@
             }
         }
 
-        // Vòng lặp kiểm tra thời gian thực
+        // Vòng lặp kiểm tra thời gian thực (chạy mỗi giây)
         function tickLoop() {
             const now = new Date();
             let needReRender = false;
 
-            // 1. Cập nhật Countdowns
+            // 1. Cập nhật Countdowns (Đếm ngược)
             const countdownElements = document.querySelectorAll('.countdown');
             countdownElements.forEach(el => {
                 const target = el.getAttribute('data-start');
@@ -682,29 +700,27 @@
                 if (timeLeft) {
                     el.innerText = `Còn ${timeLeft}`;
                 } else {
-                    // Chuyển trạng thái từ "Chưa bắt đầu" sang "Đang diễn ra" -> Cần render lại
+                    // Nếu hết giờ đếm ngược -> Chuyển trạng thái sang "Đang diễn ra" -> Cần render lại
                     needReRender = true; 
                 }
             });
 
-            // 2. Kiểm tra Alarms & Quá hạn
+            // 2. Kiểm tra Báo thức (Alarms) & Quá hạn
             state.tasks.forEach(task => {
                 if (task.completed) return;
 
                 const start = new Date(task.startTime);
                 const end = new Date(task.endTime);
 
-                // Kích hoạt chuông khi VỪA ĐẾN GIỜ (trong khoảng 1 phút)
+                // Kích hoạt chuông khi VỪA ĐẾN GIỜ
                 if (now >= start && !task.notified) {
                     triggerAlarm(task);
                     task.notified = true;
-                    saveData(); // Lưu trạng thái đã thông báo
-                    needReRender = false; // saveData đã gọi render
+                    saveData(); // Lưu trạng thái đã thông báo (saveData sẽ tự động render lại)
+                    needReRender = false; 
                 }
                 
-                // Cập nhật giao diện nếu đang xem mà task chuyển sang quá hạn
-                // (Chỉ re-render để hiện đỏ cảnh báo penalty)
-                // Hơi tốn hiệu năng re-render liên tục nên ta chỉ xét khi qua phút
+                // Cập nhật giao diện khi task chuyển sang "quá hạn"
                 if (now.getSeconds() === 0 && now > end) {
                     needReRender = true;
                 }
@@ -718,8 +734,15 @@
         // --- 7. KHỞI CHẠY (INITIALIZATION) ---
         window.onload = () => {
             loadData();
-            // Cập nhật đồng hồ mỗi giây
+            // Khởi chạy đồng hồ tick mỗi 1 giây
             setInterval(tickLoop, 1000);
+            
+            // Mẹo: Kích hoạt Web Audio API ở lần click đầu tiên để trình duyệt (đặc biệt iOS) cho phép phát tiếng
+            document.body.addEventListener('click', function unlockAudio() {
+                if (!audioCtx) audioCtx = new AudioContext();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                document.body.removeEventListener('click', unlockAudio);
+            }, { once: true });
         };
     </script>
 </body>
